@@ -3,11 +3,11 @@ import crypto from "crypto";
 import {
   downloadContentFromMessage,
   generateWAMessageContent,
-  generateWAMessageFromContent
+  generateWAMessageFromContent,
+  proto
 } from "wileys";
 import chalk from "chalk";
 import fs from "fs";
-const { proto } = baileys;
 
 export default async function handleMessage(sock, msgUpdate) {
 try {
