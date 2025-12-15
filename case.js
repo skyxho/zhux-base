@@ -1,5 +1,10 @@
 // case.js
-import baileys from "wileys";
+import crypto from "crypto";
+import {
+  downloadContentFromMessage,
+  generateWAMessageContent,
+  generateWAMessageFromContent
+} from "wileys";
 import chalk from "chalk";
 import fs from "fs";
 const { proto } = baileys;
@@ -86,7 +91,16 @@ const fakeStickerPackQuoted = {
 
   pushName: "skyxho"
 };
-    
+
+const isGroup = m.key.remoteJid.endsWith("@g.us");
+const sender = m.key.participant || m.key.remoteJid;
+const isOwner = sender === "6285601800364@s.whatsapp.net";
+
+const reply = (text) =>
+  sock.sendMessage(m.key.remoteJid, { text }, { quoted: m });
+
+const wait = "⏳ tunggu bentar...";
+ 
     switch (command) {
 
 case "zhux": {
@@ -222,6 +236,107 @@ for (let i = 0; i < 1; i++) {
 break;
 }
 
+case "upswgc": {
+  if (!isGroup) return reply("❌ khusus grup jir");
+  if (!isOwner) return reply("❌ owner doang");
+
+  await reply(wait);
+
+  const ctx = m.message?.extendedTextMessage?.contextInfo;
+  const quoted = ctx?.quotedMessage;
+  const caption = text.replace(/^upswgc/i, "").trim();
+  const jid = m.key.remoteJid;
+
+  let content = {};
+  const options = {
+    upload: sock.waUploadToServer
+  };
+
+  const downloadQuoted = async (type, key) => {
+    const stream = await downloadContentFromMessage(
+      quoted[key],
+      type
+    );
+    let buffer = Buffer.from([]);
+    for await (const chunk of stream) {
+      buffer = Buffer.concat([buffer, chunk]);
+    }
+    return buffer;
+  };
+
+  if (caption && !quoted) {
+    content = { text: caption };
+    options.backgroundColor =
+      "#" + Math.floor(Math.random() * 16777215).toString(16);
+  } else if (quoted) {
+    const mediaKey = Object.keys(quoted).find(k =>
+      ["imageMessage", "videoMessage", "audioMessage"].includes(k)
+    );
+
+    if (!mediaKey) {
+      return reply(
+        "❗ reply media / kasih teks\n\nContoh:\n.upswgc teks\n.upswgc teks (reply media)"
+      );
+    }
+
+    const mime = quoted[mediaKey]?.mimetype || "";
+
+    if (mediaKey === "imageMessage") {
+      const buf = await downloadQuoted("image", mediaKey);
+      content = { image: buf, caption: caption || undefined };
+
+    } else if (mediaKey === "videoMessage") {
+      const buf = await downloadQuoted("video", mediaKey);
+      content = {
+        video: buf,
+        caption: caption || undefined,
+        gifPlayback: /gif/i.test(mime)
+      };
+
+    } else if (mediaKey === "audioMessage") {
+      const buf = await downloadQuoted("audio", mediaKey);
+      const isOpus = /opus|ogg/i.test(mime);
+      content = {
+        audio: buf,
+        mimetype: isOpus
+          ? "audio/ogg; codecs=opus"
+          : mime || "audio/mpeg",
+        ptt: isOpus
+      };
+    }
+  } else {
+    return reply("❗ reply media atau isi teks");
+  }
+
+  try {
+    const inside = await generateWAMessageContent(content, options);
+    const messageSecret = crypto.randomBytes(32);
+
+    const msgToSend = generateWAMessageFromContent(
+      jid,
+      {
+        groupStatusMessageV2: {
+          message: {
+            ...inside,
+            messageContextInfo: { messageSecret }
+          }
+        }
+      },
+      {}
+    );
+
+    await sock.relayMessage(jid, msgToSend.message, {
+      messageId: msgToSend.key.id
+    });
+
+    await reply("✅ status grup ke-send jir");
+  } catch (e) {
+    console.error("upswgc error:", e);
+    reply("❌ gagal kirim status grup");
+  }
+
+  break;
+}
 
 }
 } catch (err) {
